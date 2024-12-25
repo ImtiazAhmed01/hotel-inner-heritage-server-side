@@ -68,25 +68,7 @@ async function run() {
             }
         });
         // for reviews
-        // For fetching reviews based on roomId
-        app.get('/rooms/:id/reviews', async (req, res) => {
-            const { id } = req.params; // Extract room ID from URL
-            const reviewsCollection = client.db("hotelinnerheritageRooms").collection("reviews");
 
-            try {
-                // Convert roomId to a number if stored as a number
-                const roomId = parseInt(id, 10);
-                const reviews = await reviewsCollection.find({ roomId }).toArray();
-                if (reviews.length > 0) {
-                    res.send(reviews);
-                } else {
-                    res.status(404).send({ message: 'No reviews found for this room' });
-                }
-            } catch (error) {
-                console.error("Error fetching reviews:", error);
-                res.status(500).send({ message: 'Internal Server Error' });
-            }
-        });
 
 
 
