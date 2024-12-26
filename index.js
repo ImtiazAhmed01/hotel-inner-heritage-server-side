@@ -90,6 +90,30 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+        app.post('/rooms/:id/book', async (req, res) => {
+            const { id } = req.params;
+            // const { date } = req.body; // We can store the date of booking if needed
+
+            try {
+                // Check if the room is already booked
+                const room = await roomsCollection.findOne({ _id: new ObjectId(id) });
+                if (!room || !room.availability) {
+                    return res.status(400).send({ message: "Room is already booked" });
+                }
+
+                // Mark the room as unavailable
+                await roomsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { availability: false } }
+                );
+
+                res.send({ message: 'Room booked successfully' });
+            } catch (error) {
+                console.error("Error booking room:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
+
 
 
 
