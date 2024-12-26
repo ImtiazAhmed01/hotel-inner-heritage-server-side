@@ -68,6 +68,21 @@ async function run() {
             }
         });
         // for reviews
+        app.get('/reviews', async (req, res) => {
+            try {
+                const reviews = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("reviews")
+                    .find()
+                    .sort({ timestamp: -1 }) // Sort by timestamp in descending order
+                    .toArray();
+                res.send(reviews);
+            } catch (error) {
+                console.error("Error fetching reviews:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
+
 
 
 
