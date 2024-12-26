@@ -92,8 +92,6 @@ async function run() {
         });
         app.post('/rooms/:id/book', async (req, res) => {
             const { id } = req.params;
-            // const { date } = req.body; // We can store the date of booking if needed
-
             try {
                 // Check if the room is already booked
                 const room = await roomsCollection.findOne({ _id: new ObjectId(id) });
@@ -114,7 +112,24 @@ async function run() {
             }
         });
 
+        app.get('/reviews', async (req, res) => {
+            const { roomId } = req.query; // roomId from query parameter, coming from the frontend
 
+            try {
+                // Fetch reviews where roomId matches the provided roomId string
+                const reviews = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("reviews")
+                    .find({ roomId }) // Compare directly as a string
+                    .sort({ timestamp: -1 }) // Sort by timestamp in descending order
+                    .toArray();
+
+                res.send(reviews);
+            } catch (error) {
+                console.error("Error fetching reviews:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
 
 
 
