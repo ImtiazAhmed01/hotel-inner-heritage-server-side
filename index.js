@@ -42,13 +42,21 @@ async function run() {
 
         app.get('/rooms', async (req, res) => {
             try {
-                const rooms = await roomsCollection.find().toArray();
+                const filter = {};
+                const { minPrice, maxPrice } = req.query;
+                if (minPrice) filter.price = { ...filter.price, $gte: parseFloat(minPrice) };
+                if (maxPrice) filter.price = { ...filter.price, $lte: parseFloat(maxPrice) };
+
+                // Fetch filtered rooms
+                const rooms = await roomsCollection.find(filter).toArray();
                 res.send(rooms);
             } catch (error) {
                 console.error("Error fetching rooms:", error);
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+
+
         // for room detail
 
 
