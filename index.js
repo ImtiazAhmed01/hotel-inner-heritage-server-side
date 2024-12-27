@@ -78,10 +78,15 @@ async function run() {
         // for reviews
         app.get('/reviews', async (req, res) => {
             try {
+                const roomId = req.query.roomId;
+                let query = {}
+                if (roomId) {
+                    query = { roomId }
+                }
                 const reviews = await client
                     .db("hotelinnerheritageRooms")
                     .collection("reviews")
-                    .find()
+                    .find(query)
                     .sort({ timestamp: -1 }) // Sort by timestamp in descending order
                     .toArray();
                 res.send(reviews);
@@ -90,27 +95,43 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
-        app.post('/rooms/:id/book', async (req, res) => {
-            const { id } = req.params;
+        app.post('/reviews', async (req, res) => {
+            const { roomId, rating, comment, userEmail, username } = req.body;
+
+            if (!roomId || !rating || !comment || !userEmail || !username) {
+                return res.status(400).send({ message: 'All fields are required.' });
+            }
+
             try {
-                // Check if the room is already booked
-                const room = await roomsCollection.findOne({ _id: new ObjectId(id) });
-                if (!room || !room.availability) {
-                    return res.status(400).send({ message: "Room is already booked" });
+                // Check if the user has booked this room
+                const booking = await client.db("hotelinnerheritageRooms").collection("bookings").findOne({
+                    roomId,
+                    userEmail
+                });
+
+                if (!booking) {
+                    return res.status(403).send({ message: 'You can only review rooms you have booked.' });
                 }
 
-                // Mark the room as unavailable
-                await roomsCollection.updateOne(
-                    { _id: new ObjectId(id) },
-                    { $set: { availability: false } }
-                );
+                // Insert the review
+                const reviewData = {
+                    roomId,
+                    username,
+                    userEmail,
+                    rating: parseInt(rating),
+                    comment,
+                    timestamp: new Date()
+                };
 
-                res.send({ message: 'Room booked successfully' });
+                await client.db("hotelinnerheritageRooms").collection("reviews").insertOne(reviewData);
+                res.send({ message: 'Review submitted successfully' });
             } catch (error) {
-                console.error("Error booking room:", error);
+                console.error("Error submitting review:", error);
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+
+
 
         app.get('/reviews', async (req, res) => {
             const { roomId } = req.query; // roomId from query parameter, coming from the frontend
@@ -130,8 +151,155 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+        // booking
+        app.post('/rooms/:id/book', async (req, res) => {
+            const { id } = req.params;
+            const { userEmail, checkInDate, checkOutDate, bookingDate } = req.body;
+
+            if (!userEmail || !checkInDate || !checkOutDate || !bookingDate) {
+                return res.status(400).send({ message: "All fields are required: userEmail, checkInDate, checkOutDate, and bookingDate." });
+            }
+
+            try {
+                const room = await roomsCollection.findOne({ _id: new ObjectId(id) });
+                if (!room) {
+                    return res.status(404).send({ message: "Room not found." });
+                }
+                if (!room.availability) {
+                    return res.status(400).send({ message: "Room is already booked." });
+                }
+
+                // Create the booking data
+                const bookingData = {
+                    roomId: id,
+                    roomName: room.name || "Unknown", // Replace `name` with the actual field for room name
+                    roomImage: room.image || "", // Replace `image` with the actual field for room image
+                    price: room.price || 0, // Replace `price` with the actual field for room price
+                    checkInDate,
+                    checkOutDate,
+                    bookingDate: new Date(bookingDate),
+                    userEmail,
+                    status: "Booked",
+                    timestamp: new Date(),
+                };
+
+                // Insert the booking data into the `bookings` collection
+                await client.db("hotelinnerheritageRooms").collection("bookings").insertOne(bookingData);
+
+                // Mark the room as unavailable
+                await roomsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { availability: false } }
+                );
+
+                res.send({ message: "Room booked successfully.", bookingData });
+            } catch (error) {
+                console.error("Error booking room:", error);
+                res.status(500).send({ message: "Internal Server Error" });
+            }
+        });
 
 
+        app.get('/user/bookings', async (req, res) => {
+            const { userEmail } = req.query;
+            if (!userEmail) {
+                return res.status(400).json({ error: "User ID is required" });
+            }
+
+            try {
+                const bookings = await client.db("hotelinnerheritageRooms").collection("bookings").find({ userEmail }).toArray();
+                res.json(bookings); // Ensure response is JSON
+            } catch (error) {
+                console.error("Error fetching bookings:", error);
+                res.status(500).json({ message: 'Internal Server Error' });
+            }
+        });
+
+
+        // app.delete('/bookings/:id', async (req, res) => {
+        //     const { id } = req.params;
+
+        //     try {
+        //         const result = await client
+        //             .db("hotelinnerheritageRooms")
+        //             .collection("bookings")
+        //             .deleteOne({ _id: new ObjectId(id) });
+
+        //         if (result.deletedCount === 0) {
+        //             return res.status(404).send({ message: 'Booking not found' });
+        //         }
+        //         await roomsCollection.updateOne(
+        //             { _id: new ObjectId(id) },
+        //             { $set: { availability: true } }
+        //         );
+        //         res.send({ message: 'Booking cancelled' });
+        //     } catch (error) {
+        //         console.error("Error cancelling booking:", error);
+        //         res.status(500).send({ message: 'Internal Server Error' });
+        //     }
+        // });
+        app.delete('/bookings/:id', async (req, res) => {
+            const { id } = req.params;
+
+            try {
+                // Find the booking by its ID
+                const booking = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("bookings")
+                    .findOne({ _id: new ObjectId(id) });
+
+                if (!booking) {
+                    return res.status(404).send({ message: 'Booking not found' });
+                }
+
+                // Delete the booking
+                const result = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("bookings")
+                    .deleteOne({ _id: new ObjectId(id) });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).send({ message: 'Booking not found' });
+                }
+
+                // Update the room's availability to true using the roomId from the booking
+                const roomUpdateResult = await roomsCollection.updateOne(
+                    { _id: new ObjectId(booking.roomId) }, // Use booking's roomId to find the room
+                    { $set: { availability: true } }
+                );
+
+                if (roomUpdateResult.modifiedCount === 0) {
+                    return res.status(500).send({ message: 'Failed to update room availability' });
+                }
+
+                res.send({ message: 'Booking cancelled and room availability restored' });
+            } catch (error) {
+                console.error("Error cancelling booking:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
+
+
+        app.patch('/bookings/:id', async (req, res) => {
+            const { id } = req.params;
+            const { newDate } = req.body;
+            try {
+                const result = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("bookings")
+                    .updateOne(
+                        { _id: new ObjectId(id) },
+                        { $set: { bookingDate: new Date(newDate) } }
+                    );
+                if (result.modifiedCount === 0) {
+                    return res.status(404).send({ message: 'Booking not found or date not changed' });
+                }
+                res.send({ message: 'Booking date updated' });
+            } catch (error) {
+                console.error("Error updating booking date:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
 
 
     }
