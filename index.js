@@ -95,76 +95,57 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
-        // app.post('/reviews', async (req, res) => {
-        //     const { roomId, rating, comment, userEmail, username } = req.body;
-
-        //     if (!roomId || !rating || !comment || !userEmail || !username) {
-        //         return res.status(400).send({ message: 'All fields are required.' });
-        //     }
-
-        //     try {
-        //         // Check if the user has booked this room
-        //         const booking = await client.db("hotelinnerheritageRooms").collection("bookings").findOne({
-        //             roomId,
-        //             userEmail
-        //         });
-
-        //         if (!booking) {
-        //             return res.status(403).send({ message: 'You can only review rooms you have booked.' });
-        //         }
-
-        //         // Insert the review
-        //         const reviewData = {
-        //             roomId,
-        //             username,
-        //             userEmail,
-        //             rating: parseInt(rating),
-        //             comment,
-        //             timestamp: new Date()
-        //         };
-
-        //         await client.db("hotelinnerheritageRooms").collection("reviews").insertOne(reviewData);
-        //         res.send({ message: 'Review submitted successfully' });
-        //     } catch (error) {
-        //         console.error("Error submitting review:", error);
-        //         res.status(500).send({ message: 'Internal Server Error' });
-        //     }
-        // });
 
         app.post('/reviews', async (req, res) => {
-            const { roomId, rating, reviewText, userEmail, reviewer } = req.body;
+            console.log("----- New Review Request Received -----");
+            console.log("Raw Request Body:", req.body); // Log full request body
 
-            if (!roomId || !rating || !reviewText || !userEmail || !reviewer) {
+            const { roomId, rating, reviewText, userEmail, reviewer, roomName, image, price } = req.body;
+
+            console.log("Extracted Fields:");
+            console.log("roomId:", roomId);
+            console.log("roomName:", roomName);
+            console.log("image:", image);
+            console.log("price:", price);
+            console.log("reviewer:", reviewer);
+            console.log("userEmail:", userEmail);
+            console.log("rating:", rating);
+            console.log("reviewText:", reviewText);
+
+            if (!roomId || !rating || !reviewText || !userEmail || !reviewer || !roomName || !image || !price) {
+                console.log("Missing required fields. Rejecting request.");
                 return res.status(400).send({ message: 'All fields are required.' });
             }
 
             try {
-                // Check if the user has booked this room
+                console.log(`Checking if user (${userEmail}) has booked room (${roomId})...`);
                 const booking = await client.db("hotelinnerheritageRooms").collection("bookings").findOne({
                     roomId,
                     userEmail
                 });
 
                 if (!booking) {
+                    console.log("User has not booked this room. Rejecting request.");
                     return res.status(403).send({ message: 'You can only review rooms you have booked.' });
                 }
 
                 const reviewData = {
                     roomId,
+                    roomName,
+                    image,
+                    price,
                     reviewer,
                     userEmail,
                     rating: parseInt(rating),
                     reviewText,
                     timestamp: new Date()
                 };
-                await roomsCollection.updateOne(
-                    { _id: new ObjectId(roomId) },
-                    { $inc: { reviewsCount: 1 } }
-                );
 
+                console.log("Final Data Before Insertion:", reviewData); // Log review data before inserting
 
-
-                await client.db("hotelinnerheritageRooms").collection("reviews").insertOne(reviewData);
+                // Insert into MongoDB
+                const result = await client.db("hotelinnerheritageRooms").collection("reviews").insertOne(reviewData);
+                console.log("Review Inserted Successfully:", result.insertedId);
 
                 res.status(201).send({ message: 'Review submitted successfully.' });
             } catch (error) {
@@ -172,6 +153,7 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+
 
 
 
@@ -193,6 +175,28 @@ async function run() {
                 res.status(500).send({ message: 'Internal Server Error' });
             }
         });
+        app.get('/review', async (req, res) => {
+            const { roomId, userEmail } = req.query; // Get roomId and userEmail from query parameters
+
+            try {
+                const query = {};
+                if (roomId) query.roomId = roomId;
+                if (userEmail) query.userEmail = userEmail; // Filter by userEmail if provided
+
+                const reviews = await client
+                    .db("hotelinnerheritageRooms")
+                    .collection("reviews")
+                    .find(query)
+                    .sort({ timestamp: -1 }) // Sort reviews by latest first
+                    .toArray();
+
+                res.send(reviews);
+            } catch (error) {
+                console.error("Error fetching reviews:", error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
+
         app.post('/bookings/review/:id', async (req, res) => {
             const bookingId = req.params.id;
             const { reviewText, rating, userEmail, timestamp } = req.body;
