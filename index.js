@@ -5,9 +5,10 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 const port = process.env.PORT || 5000;
 const app = express();
 app.use(cors());
+const jwt = require('jsonwebtoken');
 app.use(express.json());
 const { ObjectId } = require('mongodb');
-
+const JWT_SECRET = process.env.JWT_SECRET || "your_secret_key";
 const uri = `mongodb+srv://${process.env.DB_user}:${process.env.DB_pass}@cluster0.khtuk.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -28,6 +29,33 @@ async function run() {
         // console.log("Pinged your deployment. You successfully connected to MongoDB!");
         const database = client.db("hotelinnerheritageRooms");
         const roomsCollection = database.collection("rooms");
+
+        // jwt
+        app.post('/jwt', (req, res) => {
+            const { email } = req.body;
+
+            if (!email) {
+                return res.status(400).json({ message: "Email is required" });
+            }
+
+            const token = jwt.sign({ email }, JWT_SECRET, {
+                expiresIn: '1h',
+            });
+
+            res.json({ token });
+        });
+
+        app.get('/protected', (req, res) => {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) return res.sendStatus(401);
+
+            const token = authHeader.split(' ')[1];
+            jwt.verify(token, JWT_SECRET, (err, decoded) => {
+                if (err) return res.sendStatus(403);
+                res.json({ message: "Protected content", user: decoded });
+            });
+        });
+
 
         app.get('/featured-rooms', async (req, res) => {
             try {
